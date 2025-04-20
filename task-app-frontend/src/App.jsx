@@ -38,7 +38,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
-import Signup from './Signup';
 
 const App = () => {
   const [sprints, setSprints] = useState([]);
@@ -50,9 +49,9 @@ const App = () => {
   const [openModal, setOpenModal] = useState(false);
   const [batchStatus, setBatchStatus] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isSignup, setIsSignup] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState(''); // New state for login error
   const [taskDetails, setTaskDetails] = useState(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTask, setEditedTask] = useState(null);
@@ -93,14 +92,14 @@ const App = () => {
     return closestCorners(args);
   };
 
-  // Handle Login
+  // Handle Login (Reverted to original axios.post)
   const handleLogin = async () => {
     if (!username || !password) {
       toast.error('Please enter both username and password');
       return;
     }
     try {
-      const response = await axiosWithAuth.post('/login', { username, password });
+      const response = await axios.post('http://localhost:3000/login', { username, password });
       if (response.data.token) {
         setToken(response.data.token);
         localStorage.setItem('token', response.data.token);
@@ -109,11 +108,11 @@ const App = () => {
         setUsername(username);
         toast.success('Logged in successfully');
       } else {
-        toast.error('Invalid credentials');
+        setLoginError('Invalid credentials'); // Display error on page
       }
     } catch (error) {
       console.error('Login error:', error.response?.data || error.message);
-      toast.error('Error logging in');
+      setLoginError('Invalid credentials'); // Display error on page
     }
   };
 
@@ -122,6 +121,7 @@ const App = () => {
     baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
     headers: token ? { Authorization: token } : {},
   });
+
   // Fetch users for assignee dropdown
   useEffect(() => {
     if (isLoggedIn && token) {
@@ -588,11 +588,9 @@ const App = () => {
     }
   };
 
-  // Login/Signup Page (Centered)
+  // Login Page (Centered)
   if (!isLoggedIn) {
-    return isSignup ? (
-      <Signup onSignupSuccess={() => setIsSignup(false)} />
-    ) : (
+    return (
       <Box
         sx={{
           height: '100vh',
@@ -616,9 +614,6 @@ const App = () => {
           <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
             TaskApp
           </Typography>
-          <Typography variant="body1" sx={{ mb: 3, color: '#555' }}>
-            Use existing credentials (e.g., manager1 with password123) or sign up.
-          </Typography>
           <TextField
             label="Username"
             variant="outlined"
@@ -638,6 +633,11 @@ const App = () => {
             onChange={(e) => setPassword(e.target.value)}
             inputProps={{ 'aria-label': 'Password' }}
           />
+          {loginError && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {loginError}
+            </Typography>
+          )}
           <Button
             variant="contained"
             color="primary"
@@ -646,13 +646,6 @@ const App = () => {
             sx={{ py: 1.5, fontSize: '1rem', bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
           >
             Log In
-          </Button>
-          <Button
-            variant="text"
-            sx={{ mt: 2, color: '#1976d2' }}
-            onClick={() => setIsSignup(true)}
-          >
-            Don’t have an account? Sign Up
           </Button>
         </Box>
       </Box>

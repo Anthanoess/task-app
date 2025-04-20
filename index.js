@@ -74,15 +74,6 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// Signup Route
-app.post('/signup', async (req, res) => {
-  const { username, password, email, role } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = new User({ username, password: hashedPassword, email, role });
-  await user.save();
-  res.send('User created');
-});
-
 // Login Route
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;

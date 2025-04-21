@@ -48,10 +48,11 @@ const App = () => {
   const [firstSelectedStatus, setFirstSelectedStatus] = useState(null);
   const [openModal, setOpenModal] = useState(false);
   const [batchStatus, setBatchStatus] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState(''); // New state for login error
+  const [loginError, setLoginError] = useState('');
   const [taskDetails, setTaskDetails] = useState(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTask, setEditedTask] = useState(null);
@@ -66,7 +67,7 @@ const App = () => {
     title: '',
     description: '',
     assignee: '',
-    sprint: '', // Will be updated dynamically
+    sprint: '',
     status: 'Planning',
   });
   const [newSprint, setNewSprint] = useState({
@@ -79,11 +80,10 @@ const App = () => {
   const [users, setUsers] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('token') || '');
-  const [activeTask, setActiveTask] = useState(null); // For DragOverlay
-  const [isLoading, setIsLoading] = useState(false); // Loading state for data fetching
-  const [searchQuery, setSearchQuery] = useState(''); // State for search
+  const [activeTask, setActiveTask] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Custom collision detection to prioritize columns
   const customCollisionDetection = (args) => {
     const columnCollisions = rectIntersection(args);
     if (columnCollisions.length > 0) {
@@ -92,7 +92,6 @@ const App = () => {
     return closestCorners(args);
   };
 
-  // Handle Login (Reverted to original axios.post)
   const handleLogin = async () => {
     if (!username || !password) {
       toast.error('Please enter both username and password');
@@ -108,21 +107,19 @@ const App = () => {
         setUsername(username);
         toast.success('Logged in successfully');
       } else {
-        setLoginError('Invalid credentials'); // Display error on page
+        setLoginError('Invalid credentials');
       }
     } catch (error) {
       console.error('Login error:', error.response?.data || error.message);
-      setLoginError('Invalid credentials'); // Display error on page
+      setLoginError('Invalid credentials');
     }
   };
 
-  // Axios instance with token for authenticated requests
   const axiosWithAuth = axios.create({
     baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
     headers: token ? { Authorization: token } : {},
   });
 
-  // Fetch users for assignee dropdown
   useEffect(() => {
     if (isLoggedIn && token) {
       const fetchUsers = async () => {
@@ -138,7 +135,6 @@ const App = () => {
     }
   }, [isLoggedIn, token]);
 
-  // Fetch sprints when logged in
   useEffect(() => {
     if (isLoggedIn && token) {
       const fetchSprints = async () => {
@@ -147,7 +143,7 @@ const App = () => {
           const response = await axiosWithAuth.get('/sprints');
           const filteredSprints = response.data
             .filter((sprint) => sprint.status !== 'Completed')
-            .sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+            .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
           setSprints(filteredSprints);
           if (filteredSprints.length > 0) {
             setSelectedSprint(filteredSprints[0]._id);
@@ -165,7 +161,6 @@ const App = () => {
     }
   }, [isLoggedIn, token]);
 
-  // Fetch tasks when sprint changes
   useEffect(() => {
     if (selectedSprint && token) {
       const fetchTasks = async () => {
@@ -177,7 +172,7 @@ const App = () => {
           setFilteredTasks(sprintTasks);
           setSelectedTasks([]);
           setFirstSelectedStatus(null);
-          setSearchQuery(''); // Reset search when sprint changes
+          setSearchQuery('');
         } catch (error) {
           console.error('Error fetching tasks:', error.response?.data || error.message);
           toast.error('Error fetching tasks');
@@ -189,21 +184,17 @@ const App = () => {
     }
   }, [selectedSprint, token]);
 
-  // Update newTask sprint when selectedSprint changes
   useEffect(() => {
     setNewTask((prev) => ({ ...prev, sprint: selectedSprint }));
   }, [selectedSprint]);
 
-  // Filter tasks based on assignee and search query
   const handleFilterTasks = () => {
     let updatedTasks = tasks;
 
-    // Apply assignee filter
     if (filterAssignee) {
       updatedTasks = updatedTasks.filter((task) => task.assignedTo.username === filterAssignee);
     }
 
-    // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       updatedTasks = updatedTasks.filter(
@@ -218,19 +209,16 @@ const App = () => {
     setIsFilterTasksOpen(false);
   };
 
-  // Real-time search handler
   const handleSearchChange = (e) => {
     const query = e.target.value;
     setSearchQuery(query);
 
     let updatedTasks = tasks;
 
-    // Apply assignee filter
     if (filterAssignee) {
       updatedTasks = updatedTasks.filter((task) => task.assignedTo.username === filterAssignee);
     }
 
-    // Apply search filter
     if (query) {
       const lowerQuery = query.toLowerCase();
       updatedTasks = updatedTasks.filter(
@@ -244,7 +232,6 @@ const App = () => {
     setFilteredTasks(updatedTasks);
   };
 
-  // Handle task selection
   const handleTaskSelect = (taskId, status) => {
     if (selectedTasks.includes(taskId)) {
       setSelectedTasks(selectedTasks.filter((id) => id !== taskId));
@@ -261,7 +248,6 @@ const App = () => {
     }
   };
 
-  // Handle drag-and-drop with @dnd-kit
   const handleDragStart = (event) => {
     const { active } = event;
     const activeTask = filteredTasks.find((task) => task._id === active.id);
@@ -283,14 +269,18 @@ const App = () => {
     const activeId = active.id;
     const overId = over.id;
 
-    // Find the source and destination columns
+    // Check if the dragged task is selected
+    if (selectedTasks.includes(activeId)) {
+      toast.error('Cannot move task while selected for bulk update');
+      return;
+    }
+
     const activeTask = filteredTasks.find((task) => task._id === activeId);
     if (!activeTask) return;
 
     const sourceColumn = activeTask.status;
     let destinationColumn = sourceColumn;
 
-    // Determine the destination column
     if (overId.startsWith('column-')) {
       destinationColumn = overId.replace('column-', '');
     } else {
@@ -301,7 +291,6 @@ const App = () => {
     }
 
     if (sourceColumn === destinationColumn) {
-      // Reorder within the same column
       const columnTasks = filteredTasks.filter((task) => task.status === sourceColumn);
       const oldIndex = columnTasks.findIndex((task) => task._id === activeId);
       const newIndex = overId.startsWith('column-')
@@ -315,14 +304,12 @@ const App = () => {
       setFilteredTasks(updatedTasks);
       setTasks(updatedTasks);
     } else {
-      // Move to a different column
       try {
-        await axiosWithAuth.post('/tasks/batch-update', {
+        const response = await axiosWithAuth.post('/tasks/batch-update', {
           taskIds: [activeId],
           newStatus: destinationColumn,
         });
         toast.success('Task moved successfully');
-        const response = await axiosWithAuth.get('/tasks');
         const sprintTasks = response.data.filter((task) => task.sprint._id === selectedSprint);
         setTasks(sprintTasks);
         setFilteredTasks(filterAssignee ? sprintTasks.filter((task) => task.assignedTo.username === filterAssignee) : sprintTasks);
@@ -333,8 +320,8 @@ const App = () => {
     }
   };
 
-  // Sortable Task Item Component
   const SortableTask = ({ task, index, column, handleTaskClick, handleTaskSelect, selectedTasks, firstSelectedStatus }) => {
+    const isSelected = selectedTasks.includes(task._id);
     const {
       attributes,
       listeners,
@@ -342,7 +329,11 @@ const App = () => {
       transform,
       transition,
       isDragging,
-    } = useSortable({ id: task._id, data: { column } });
+    } = useSortable({ 
+      id: task._id, 
+      data: { column },
+      // Removed disabled: isSelected to allow dragging
+    });
 
     const style = {
       transform: CSS.Transform.toString(transform),
@@ -365,7 +356,9 @@ const App = () => {
             className="drag-handle"
             {...listeners}
             {...attributes}
-            sx={{ cursor: 'grab' }}
+            sx={{ 
+              cursor: isSelected ? 'not-allowed' : 'grab' // Visual hint that dragging might be restricted
+            }}
           >
             <DragIndicatorIcon />
           </IconButton>
@@ -391,7 +384,6 @@ const App = () => {
     );
   };
 
-  // Droppable Column Component
   const DroppableColumn = ({ column, children }) => {
     const { setNodeRef, isOver } = useDroppable({
       id: `column-${column}`,
@@ -408,7 +400,6 @@ const App = () => {
         </Typography>
         <Box className="droppable-area">
           {children}
-          {/* Placeholder for empty columns */}
           {filteredTasks.filter((task) => task.status === column).length === 0 && (
             <Box className="empty-column-placeholder" />
           )}
@@ -417,36 +408,37 @@ const App = () => {
     );
   };
 
-  // Batch update modal handlers
   const handleOpenModal = () => {
     if (selectedTasks.length === 0) {
       toast.warn('Please select at least one task');
       return;
     }
-    if (firstSelectedStatus === 'Planning') {
-      setBatchStatus('Execution'); // Default to Execution
-    } else if (firstSelectedStatus === 'Execution') {
-      setBatchStatus('Review');
-    } else {
+    if (firstSelectedStatus === 'Review') {
       toast.warn('Tasks in Review cannot be moved');
       return;
     }
+    setBatchStatus('');
     setOpenModal(true);
   };
 
   const handleCloseModal = () => {
     setOpenModal(false);
     setBatchStatus('');
+    setIsUpdating(false);
   };
 
   const handleBatchUpdate = async () => {
+    if (!batchStatus) {
+      toast.error('Please select a new status');
+      return;
+    }
+    setIsUpdating(true);
     try {
-      await axiosWithAuth.post('/tasks/batch-update', {
+      const response = await axiosWithAuth.post('/tasks/batch-update', {
         taskIds: selectedTasks,
         newStatus: batchStatus,
       });
       toast.success('Tasks updated successfully');
-      const response = await axiosWithAuth.get('/tasks');
       const sprintTasks = response.data.filter((task) => task.sprint._id === selectedSprint);
       setTasks(sprintTasks);
       setFilteredTasks(filterAssignee ? sprintTasks.filter((task) => task.assignedTo.username === filterAssignee) : sprintTasks);
@@ -456,10 +448,10 @@ const App = () => {
     } catch (error) {
       console.error('Error updating tasks:', error.response?.data || error.message);
       toast.error('Error updating tasks');
+      setIsUpdating(false);
     }
   };
 
-  // Handle task click for details modal
   const handleTaskClick = (event, task) => {
     if (event.target.type !== 'checkbox' && !event.target.closest('.drag-handle')) {
       setTaskDetails(task);
@@ -467,7 +459,6 @@ const App = () => {
     }
   };
 
-  // Handle task edit
   const handleEditTask = () => {
     setIsEditingTask(true);
   };
@@ -501,7 +492,6 @@ const App = () => {
     }
   };
 
-  // Handle add task
   const handleAddTask = async () => {
     if (!newTask.title || !newTask.assignee) {
       toast.error('Title and assignee are required');
@@ -515,7 +505,7 @@ const App = () => {
       }
       const response = await axiosWithAuth.post('/tasks', {
         ...newTask,
-        sprint: selectedSprint, // Use the current selectedSprint
+        sprint: selectedSprint,
         assignedTo: assigneeId,
       });
       toast.success('Task added successfully');
@@ -531,7 +521,6 @@ const App = () => {
     }
   };
 
-  // Handle add sprint (for managers)
   const handleAddSprint = async () => {
     if (!newSprint.name || !newSprint.startDate || !newSprint.endDate) {
       toast.error('Please fill in all required fields');
@@ -553,7 +542,6 @@ const App = () => {
     }
   };
 
-  // Handle edit sprint (for managers)
   const handleEditSprint = async () => {
     if (!editSprint.name || !editSprint.startDate || !editSprint.endDate) {
       toast.error('Please fill in all required fields');
@@ -574,7 +562,6 @@ const App = () => {
     }
   };
 
-  // Open edit sprint modal with current sprint details
   const openEditSprintModal = () => {
     const currentSprint = sprints.find((sprint) => sprint._id === selectedSprint);
     if (currentSprint) {
@@ -588,7 +575,6 @@ const App = () => {
     }
   };
 
-  // Login Page (Centered)
   if (!isLoggedIn) {
     return (
       <Box
@@ -652,7 +638,6 @@ const App = () => {
     );
   }
 
-  // Task Board (Centered with Toolbar spacing)
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
@@ -698,7 +683,7 @@ const App = () => {
           minHeight: '100vh',
         }}
       >
-        <Toolbar /> {/* Adds space below AppBar */}
+        <Toolbar />
         <Container maxWidth="lg">
           <Typography
             variant="h4"
@@ -877,7 +862,6 @@ const App = () => {
                               />
                             ))}
                         </SortableContext>
-                        {/* Placeholder for empty columns */}
                         {filteredTasks.filter((task) => task.status === status).length === 0 && (
                           <Box className="empty-column-placeholder" />
                         )}
@@ -912,7 +896,6 @@ const App = () => {
             </>
           )}
 
-          {/* Task Details Modal */}
           <Modal
             open={!!taskDetails}
             onClose={() => {
@@ -1037,7 +1020,6 @@ const App = () => {
             </Fade>
           </Modal>
 
-          {/* Edit Confirmation Dialog */}
           <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
             <DialogTitle>Confirm Edit</DialogTitle>
             <DialogContent>
@@ -1053,7 +1035,6 @@ const App = () => {
             </DialogActions>
           </Dialog>
 
-          {/* Add Task Modal */}
           <Modal
             open={isAddTaskOpen}
             onClose={() => setIsAddTaskOpen(false)}
@@ -1138,7 +1119,6 @@ const App = () => {
             </Fade>
           </Modal>
 
-          {/* Add Sprint Modal */}
           <Modal
             open={isAddSprintOpen}
             onClose={() => setIsAddSprintOpen(false)}
@@ -1222,7 +1202,6 @@ const App = () => {
             </Fade>
           </Modal>
 
-          {/* Edit Sprint Modal */}
           <Modal
             open={isEditSprintOpen}
             onClose={() => setIsEditSprintOpen(false)}
@@ -1310,7 +1289,6 @@ const App = () => {
             </Fade>
           </Modal>
 
-          {/* Filter Tasks Modal */}
           <Modal
             open={isFilterTasksOpen}
             onClose={() => setIsFilterTasksOpen(false)}
@@ -1362,7 +1340,6 @@ const App = () => {
             </Fade>
           </Modal>
 
-          {/* Settings Modal */}
           <Modal
             open={isSettingsOpen}
             onClose={() => setIsSettingsOpen(false)}
@@ -1395,7 +1372,6 @@ const App = () => {
             </Fade>
           </Modal>
 
-          {/* Bulk Update Modal */}
           <Modal
             open={openModal}
             onClose={handleCloseModal}
@@ -1423,29 +1399,48 @@ const App = () => {
                 <Typography sx={{ mb: 2 }}>
                   Moving {selectedTasks.length} task(s) from {firstSelectedStatus} to:
                 </Typography>
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>New Status</InputLabel>
-                  <Select
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body1" component="label" htmlFor="new-status-select">
+                    New Status
+                  </Typography>
+                  <select
+                    id="new-status-select"
                     value={batchStatus}
-                    onChange={(e) => setBatchStatus(e.target.value)}
-                    label="New Status"
-                    inputProps={{ 'aria-label': 'New Status' }}
+                    onChange={(e) => {
+                      console.log('Selected status:', e.target.value);
+                      setBatchStatus(e.target.value);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      fontSize: '16px',
+                      borderRadius: '4px',
+                      border: '1px solid #ccc',
+                      marginTop: '8px',
+                    }}
                   >
+                    <option value="" disabled>Select a status</option>
                     {firstSelectedStatus === 'Planning' ? (
                       <>
-                        <MenuItem value="Execution">Execution</MenuItem>
-                        <MenuItem value="Review">Review</MenuItem>
+                        <option value="Execution">Execution</option>
+                        <option value="Review">Review</option>
                       </>
                     ) : (
-                      <MenuItem value="Review">Review</MenuItem>
+                      <option value="Review">Review</option>
                     )}
-                  </Select>
-                </FormControl>
+                  </select>
+                </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Button variant="contained" color="primary" onClick={handleBatchUpdate}>
-                    Confirm
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleBatchUpdate}
+                    disabled={isUpdating}
+                    startIcon={isUpdating ? <CircularProgress size={20} /> : null}
+                  >
+                    {isUpdating ? 'Updating...' : 'Confirm'}
                   </Button>
-                  <Button variant="outlined" onClick={handleCloseModal}>
+                  <Button variant="outlined" onClick={handleCloseModal} disabled={isUpdating}>
                     Cancel
                   </Button>
                 </Box>

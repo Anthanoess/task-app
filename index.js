@@ -151,6 +151,19 @@ app.put('/tasks/:id', verifyToken, async (req, res) => {
   }
 });
 
+app.delete('/tasks/:id', verifyToken, async (req, res) => {
+  try {
+    const task = await Task.findByIdAndDelete(req.params.id);
+    if (!task) {
+      return res.status(404).send('Task not found');
+    }
+    res.json({ message: 'Task deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(500).send('Error deleting task');
+  }
+});
+
 // Sprint Routes
 app.post('/sprints', verifyToken, async (req, res) => {
   if (req.user.role !== 'manager') {
@@ -210,13 +223,8 @@ app.post('/tasks/batch-update', verifyToken, async (req, res) => {
     return res.status(400).send('Invalid request: taskIds and newStatus are required');
   }
   try {
-    // Update the tasks
     await Task.updateMany({ _id: { $in: taskIds } }, { status: newStatus });
-
-    // Fetch the updated tasks
     const updatedTasks = await Task.find({ _id: { $in: taskIds } }).populate('assignedTo');
-
-    // Send completion emails if moving to "Review"
     if (newStatus === 'Review') {
       for (const task of updatedTasks) {
         if (task.assignedTo) {
@@ -224,8 +232,6 @@ app.post('/tasks/batch-update', verifyToken, async (req, res) => {
         }
       }
     }
-
-    // Fetch all tasks for the client to refresh the UI
     const allTasks = await Task.find().populate('assignedTo').populate('sprint');
     res.json(allTasks);
   } catch (err) {
